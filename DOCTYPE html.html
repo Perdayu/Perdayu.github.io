@@ -1,0 +1,104 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 关键安全策略 -->
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
+    <title>视频转VP9工具（修复版）</title>
+    <style>/* 原有样式不变 */</style>
+</head>
+<body>
+    <div class="container">
+        <h2>视频转VP9编码工具（修复版）</h2>
+        <input type="file" id="videoInput" accept="video/mp4,video/webm">
+        <button id="convertBtn" disabled>开始转换</button>
+        <a id="downloadLink" style="display: none;">下载VP9视频</a>
+        <div id="progress"><div id="progress-bar"></div></div>
+        <video id="preview" controls></video>
+        <div id="status"></div>
+    </div>
+
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/ffmpeg.min.js"></script>
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        let ffmpeg = null;
+        let isFFmpegReady = false;
+
+        async function initFFmpeg() {
+            try {
+                ffmpeg = createFFmpeg({
+                    log: true,
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.12.2/dist/ffmpeg-core.js',
+                });
+                await ffmpeg.load();
+                isFFmpegReady = true;
+                console.log('FFmpeg初始化成功');
+            } catch (err) {
+                console.error('FFmpeg初始化失败:', err);
+                alert('视频处理引擎加载失败: ' + err.message);
+            }
+        }
+
+        initFFmpeg();
+
+        document.getElementById('videoInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const url = URL.createObjectURL(file);
+            const preview = document.getElementById('preview');
+            
+            preview.src = url;
+            preview.onerror = () => {
+                alert('预览失败: 请尝试MP4或WebM格式的视频');
+                URL.revokeObjectURL(url);
+            };
+            
+            document.getElementById('convertBtn').disabled = !isFFmpegReady;
+        });
+
+        document.getElementById('convertBtn').addEventListener('click', async () => {
+            if (!isFFmpegReady || !videoInput.files[0]) return;
+
+            try {
+                const inputFile = videoInput.files[0];
+                const outputName = 'output.webm';
+                
+                // 重置状态
+                convertBtn.disabled = true;
+                document.getElementById('progress').style.display = 'block';
+
+                // 写入文件并转换
+                await ffmpeg.FS('writeFile', 'input', await fetchFile(inputFile));
+                await ffmpeg.run(
+                    '-i', 'input',
+                    '-c:v', 'libvpx-vp9',
+                    '-crf', '30',
+                    '-b:v', '0',
+                    '-row-mt', '1',
+                    outputName
+                );
+
+                // 生成下载链接
+                const data = ffmpeg.FS('readFile', outputName);
+                const blob = new Blob([data.buffer], { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                
+                const downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = url;
+                downloadLink.download = 'converted_video.webm';
+                downloadLink.style.display = 'inline-block';
+
+            } catch (err) {
+                console.error('转换失败:', err);
+                alert('转换错误: ' + err.message);
+            } finally {
+                convertBtn.disabled = false;
+                document.getElementById('progress').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
